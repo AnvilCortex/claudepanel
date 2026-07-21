@@ -34,7 +34,7 @@ import aiohttp
 from aiohttp import web
 
 DEFAULT_CONFIG = {
-    "ntfy_url": "https://ntfy.aph.run",
+    "ntfy_url": "https://ntfy.home.arpa",
     "devices": {
         "office": {"topics": ["infra-alerts", "infra-status"]},
         "den":    {"topics": ["infra-alerts"]},
@@ -46,7 +46,7 @@ DEFAULT_CONFIG = {
     # http actions only fire at these host suffixes (SSRF guard: a producer
     # with publish access must not be able to aim the hub's network identity
     # at cluster-internal endpoints)
-    "allowed_action_hosts": ["aph.run"],
+    "allowed_action_hosts": ["home.arpa"],
 }
 
 DEFAULT_TTL_S = 1800          # 30 min, matches the firmware card default

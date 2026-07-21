@@ -17,7 +17,7 @@
 // stopped reading inbound frames after the handshake while writes kept
 // working. A client-mode WiFiClient read loop we own avoids all of it.
 #ifndef BRIDGE_HOST
-#define BRIDGE_HOST "10.10.1.135"
+#define BRIDGE_HOST "192.168.1.50"
 #endif
 #ifndef BRIDGE_PORT
 #define BRIDGE_PORT 8788

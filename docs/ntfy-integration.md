@@ -1,13 +1,13 @@
 # ntfy Integration — Handoff Guide
 
 Evolving claudepanel from a single-purpose Claude Code monitor into a
-4-device notification fleet with `ntfy.aph.run` as the hub.
+4-device notification fleet with `ntfy.home.arpa` as the hub.
 This doc is the working spec: what exists, what's designed, what's left,
 and where each piece of work happens.
 
 ```mermaid
 flowchart LR
-  AM[Alertmanager] -->|publish| N[ntfy.aph.run]
+  AM[Alertmanager] -->|publish| N[ntfy.home.arpa]
   CI[CI / pipelines] -->|publish| N
   CC[claude bridge<br/>per dev machine] -->|publish status topics| N
   APP[anything with curl] -->|publish| N
@@ -28,7 +28,7 @@ flowchart LR
 | firmware 0.2.0 | working: claude status/menu/perm screens, TCP client link, WiFi telemetry + strongest-BSSID roaming, **notify stack + card/gauge/list/graph views**, `DEVICE_NAME` identity | `firmware/` |
 | bridge (claude-local) | working: statusline/hook/permission intake, tmux injection, `POST /notify` local intake, action execution, optional ntfy session publishing | `bridge/bridge.py` |
 | panel-hub | implemented: multi-device server, ntfy streaming subscriber, topic router, action executor; **not yet deployed** | `hub/` |
-| ntfy (live) | `https://ntfy.aph.run` — LXC vmid 422 via Caddy, compose-deploy role, **auth required** (`NTFY_AUTH_USERS`/`NTFY_AUTH_TOKENS` provisioned from 1Password Connect at runtime; apps use the shared `apps_token`) | `infra/ansible/roles/compose-deploy/files/ntfy/` |
+| ntfy (live) | `https://ntfy.home.arpa` — LXC vmid 422 via Caddy, compose-deploy role, **auth required** (`NTFY_AUTH_USERS`/`NTFY_AUTH_TOKENS` provisioned from 1Password Connect at runtime; apps use the shared `apps_token`) | `infra/ansible/roles/compose-deploy/files/ntfy/` |
 | ntfy (k8s manifest) | `ntfy.anvilcortex.com` — manifest exists but the host 404s at the ingress (no matching rule) and it has no auth; stale relative to the live LXC deployment, reconcile in infra | `infra/k8s/apps/ntfy/` |
 
 The claude-local bridge never goes away: permission round-trips and tmux
@@ -41,12 +41,12 @@ Four CrowPanel 1.28" HMI ESP32-S3 units. Each gets:
 
 - a name baked at build time (`DEVICE_NAME` in `firmware/.env`, sent in
   the `hello` message)
-- a DHCP reservation and a DNS record on `aph.run`
-  (e.g. `panel-office.aph.run`) — note the devices are TCP *clients*;
+- a DHCP reservation and a DNS record on `home.arpa`
+  (e.g. `panel-office.home.arpa`) — note the devices are TCP *clients*;
   the DNS names exist for OTA (`pio run -t upload --upload-port
-  panel-office.aph.run`) and future admin HTTP, not for the hub link
+  panel-office.home.arpa`) and future admin HTTP, not for the hub link
 - a `BRIDGE_HOST` to dial. `WiFiClient::connect()` resolves hostnames,
-  so this can be `panel-hub.aph.run` — no firmware change needed
+  so this can be `panel-hub.home.arpa` — no firmware change needed
 
 Interim topology until the hub exists: the desk device keeps dialing the
 Mac's local bridge (today's setup); the other three dial the hub. Target
@@ -74,9 +74,9 @@ Any ntfy publish renders as a card. Field mapping:
 
 ```sh
 curl -H "X-Title: backup failed" -H "X-Priority: 4" -H "X-Tags: rotating_light" \
-  -H "X-Actions: http, Retry, https://runner.aph.run/api/retry/backup, method=POST" \
+  -H "X-Actions: http, Retry, https://runner.home.arpa/api/retry/backup, method=POST" \
   -d "nightly restic run exited 1 on tank" \
-  https://ntfy.aph.run/infra-alerts
+  https://ntfy.home.arpa/infra-alerts
 ```
 
 ### Tier 2 — template views (JSON message bodies)
@@ -94,7 +94,7 @@ in firmware for the round 240x240 display:
 
 ```sh
 curl -d '{"view":"gauge","label":"tank pool","value":81,"unit":"%","color":"#D97757"}' \
-  https://ntfy.aph.run/infra-status
+  https://ntfy.home.arpa/infra-status
 ```
 
 A template message *replaces* the previous template from the same topic
@@ -119,7 +119,7 @@ expire via ntfy's `X-Expires`/hub-side TTL (default 30 min).
 
 ```json
 {
-  "ntfy_url": "https://ntfy.aph.run",
+  "ntfy_url": "https://ntfy.home.arpa",
   "devices": {
     "office": {"topics": ["infra-alerts", "infra-status"]},
     "den":    {"topics": ["infra-alerts"]},
@@ -189,8 +189,8 @@ statusline/hook/tmux parts, add the ntfy subscriber and router).
   raw TCP, so expose 8788 via the nginx ingress `tcp-services` ConfigMap
   or a LoadBalancer service — HTTP ingress won't carry it. The hub's own
   HTTP (health, config reload) can ride normal ingress at
-  `panel-hub.aph.run`
-- DNS: `panel-hub.aph.run` → the TCP entry point; this is the one name
+  `panel-hub.home.arpa`
+- DNS: `panel-hub.home.arpa` → the TCP entry point; this is the one name
   all device `.env` files bake as `BRIDGE_HOST`
 
 Auth: the live ntfy requires tokens (anonymous publish/subscribe returns
@@ -258,7 +258,7 @@ only the infra-repo items are yours to carry into IaC.
 - [x] firmware: notify stack + card/gauge/list/graph views, DEVICE_NAME (0.2.0)
 - [x] bridge: `POST /notify` intake, action execution, optional ntfy session publishing
 - [x] hub: multi-device server, ntfy streaming subscriber, topic router, action executor (`hub/`)
-- [ ] infra: `k8s/apps/panel-hub/` manifests from `hub/Dockerfile`, TCP exposure for 8788, `panel-hub.aph.run` DNS (infra repo)
-- [ ] infra: DHCP reservations + `panel-*.aph.run` records for the four devices (infra repo)
+- [ ] infra: `k8s/apps/panel-hub/` manifests from `hub/Dockerfile`, TCP exposure for 8788, `panel-hub.home.arpa` DNS (infra repo)
+- [ ] infra: DHCP reservations + `panel-*.home.arpa` records for the four devices (infra repo)
 - [ ] infra: ntfy auth tokens once anything is internet-reachable (infra repo)
-- [ ] flash + register remaining three devices (`DEVICE_NAME` per device, dial `panel-hub.aph.run`) — here, once the hub is live
+- [ ] flash + register remaining three devices (`DEVICE_NAME` per device, dial `panel-hub.home.arpa`) — here, once the hub is live

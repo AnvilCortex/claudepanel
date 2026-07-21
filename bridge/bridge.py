@@ -33,7 +33,7 @@ DEFAULT_CONFIG = {
     "perm_timeout_s": 55,
     # optional: publish a session-summary template to ntfy so hub-connected
     # panels can show claude state; empty topic disables
-    "ntfy_url": "https://ntfy.aph.run",
+    "ntfy_url": "https://ntfy.home.arpa",
     "ntfy_claude_topic": "",
     "ntfy_token": "",  # live ntfy requires auth; keep out of git
     "presets": [
