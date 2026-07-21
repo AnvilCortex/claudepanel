@@ -57,6 +57,29 @@ void Ui::permCancelled() {
   toast("resolved in terminal");
 }
 
+void Ui::notifyNew(int idx) {
+  Notification& n = _st.notifs[idx];
+  if (_scr == Screen::BOOT || _scr == Screen::PORTAL) return;
+  if (_scr == Screen::PERM) return; // permission prompts always win
+  if (n.priority >= 5 ||
+      (n.priority == 4 && (_scr == Screen::STATUS || _scr == Screen::NOTIF))) {
+    _notifIdx = idx;
+    _actIdx = -1;
+    _scr = Screen::NOTIF;
+  }
+  _st.dirty = true;
+}
+
+void Ui::dismissNotif(bool tellHub) {
+  if (_notifIdx < 0 || !_st.notifs[_notifIdx].used) return;
+  if (tellHub && _net) _net->sendNotifAction(_st.notifs[_notifIdx].id, 0, true);
+  _st.notifs[_notifIdx].used = false;
+  _actIdx = -1;
+  _notifIdx = _st.stepNotif(_notifIdx, 1);
+  if (_notifIdx < 0) toStatus();
+  _st.dirty = true;
+}
+
 void Ui::toast(const char* msg) {
   strlcpy(_toast, msg, sizeof(_toast));
   _toastUntil = millis() + 1800;
@@ -84,6 +107,21 @@ void Ui::onSteps(int16_t n) {
       _st.dirty = true;
       break;
     }
+    case Screen::NOTIF: {
+      if (_notifIdx < 0) break;
+      if (_actIdx >= 0) {
+        int i = _actIdx + n;
+        int hi = _st.notifs[_notifIdx].nActs - 1;
+        if (i < 0) i = 0;
+        if (i > hi) i = hi;
+        _actIdx = i;
+      } else {
+        int dir = n > 0 ? 1 : -1;
+        for (int k = 0; k < abs(n); k++) _notifIdx = _st.stepNotif(_notifIdx, dir);
+      }
+      _st.dirty = true;
+      break;
+    }
     default:
       break;
   }
@@ -97,19 +135,30 @@ void Ui::onClick() {
       _st.dirty = true;
       break;
 
-    case Screen::MENU:
-      if (_menuIdx >= _st.presetCount) { // Back
+    case Screen::MENU: {
+      int nr = menuNotifRow();
+      if (_menuIdx >= menuCount() - 1) { // Back
         toStatus();
+      } else if (nr && _menuIdx == 0) {  // notifications
+        _notifIdx = _st.stepNotif(MAX_NOTIFS - 1, 1);
+        _actIdx = -1;
+        if (_notifIdx >= 0) {
+          _scr = Screen::NOTIF;
+          _st.dirty = true;
+        } else {
+          toStatus();
+        }
       } else if (_st.focused < 0) {
         toast("no session");
       } else if (!_st.bridgeConnected) {
         toast("bridge down");
       } else {
-        if (_net) _net->sendInject(_st.sessions[_st.focused].sid, _st.presets[_menuIdx].text);
+        if (_net) _net->sendInject(_st.sessions[_st.focused].sid, _st.presets[_menuIdx - nr].text);
         toStatus();
         toast("sent");
       }
       break;
+    }
 
     case Screen::PERM: {
       const char* result = _permIdx == 0 ? "allow" : _permIdx == 2 ? "deny" : "pass";
@@ -117,6 +166,26 @@ void Ui::onClick() {
       _st.perm.active = false;
       toStatus();
       toast(_permIdx == 0 ? "allowed" : _permIdx == 2 ? "denied" : "passed");
+      break;
+    }
+    case Screen::NOTIF: {
+      if (_notifIdx < 0 || !_st.notifs[_notifIdx].used) {
+        toStatus();
+        break;
+      }
+      Notification& nf = _st.notifs[_notifIdx];
+      if (_actIdx < 0) {
+        if (nf.nActs > 0) {
+          _actIdx = 0;
+          _st.dirty = true;
+        } else {
+          dismissNotif(true);
+        }
+      } else {
+        if (_net) _net->sendNotifAction(nf.id, _actIdx, false);
+        _actIdx = -1;
+        toast("action sent");
+      }
       break;
     }
     default:
@@ -128,6 +197,14 @@ void Ui::onLong() {
   switch (_scr) {
     case Screen::MENU:
       toStatus();
+      break;
+    case Screen::NOTIF:
+      if (_actIdx >= 0) {
+        _actIdx = -1;
+        _st.dirty = true;
+      } else {
+        dismissNotif(true);
+      }
       break;
     case Screen::PERM:
       if (_net) _net->sendPermResult(_st.perm.id, "pass");
@@ -152,12 +229,21 @@ void Ui::tick(uint32_t now) {
     _toastUntil = 0;
     _st.dirty = true;
   }
+  if (_scr == Screen::NOTIF && (_notifIdx < 0 || !_st.notifs[_notifIdx].used)) {
+    _notifIdx = _notifIdx < 0 ? _st.stepNotif(MAX_NOTIFS - 1, 1)
+                              : _st.stepNotif(_notifIdx, 1);
+    _actIdx = -1;
+    if (_notifIdx < 0) toStatus();
+    _st.dirty = true;
+  }
 
   bool animating = false;
   if (_scr == Screen::STATUS && _st.focused >= 0 &&
       _st.sessions[_st.focused].state == SessState::WORKING)
     animating = true;
   if (_scr == Screen::PERM) animating = true;
+  if (_scr == Screen::NOTIF && _notifIdx >= 0 && _st.notifs[_notifIdx].expiresAt)
+    animating = true;
 
   if (_st.dirty || (animating && now - _lastRender >= 66)) {
     _spin += 16;
@@ -251,6 +337,9 @@ void Ui::render(uint32_t now) {
     case Screen::PERM:
       renderPerm(now);
       break;
+    case Screen::NOTIF:
+      renderNotif(now);
+      break;
   }
 
   // toast overlay
@@ -273,6 +362,17 @@ void Ui::renderStatus(uint32_t now) {
 
   // bridge indicator
   _g->fillCircle(120, 16, 3, _st.bridgeConnected ? C_GREEN : C_RED);
+
+  // pending notification pill
+  int nn = _st.notifCount();
+  if (nn > 0) {
+    char nb[6];
+    snprintf(nb, sizeof(nb), "%d", nn);
+    _g->fillRoundRect(136, 8, 22, 16, 8, C_RINGBG);
+    _g->setFont(&fonts::Font2);
+    _g->setTextColor(C_AMBER);
+    _g->drawString(nb, 147, 16);
+  }
 
   if (!s) {
     _g->setFont(&fonts::FreeSansBold9pt7b);
@@ -359,11 +459,21 @@ void Ui::renderMenu() {
   if (first > total - 3) first = total - 3;
   if (first < 0) first = 0;
 
+  int nr = menuNotifRow();
+  char nbuf[20];
   for (int row = 0; row < 3; row++) {
     int i = first + row;
     if (i >= total) break;
     int y = 92 + row * 36;
-    const char* label = (i >= _st.presetCount) ? "< back" : _st.presets[i].label;
+    const char* label;
+    if (i >= total - 1) {
+      label = "< back";
+    } else if (nr && i == 0) {
+      snprintf(nbuf, sizeof(nbuf), "notifs (%d)", _st.notifCount());
+      label = nbuf;
+    } else {
+      label = _st.presets[i - nr].label;
+    }
     _g->setFont(&fonts::FreeSansBold9pt7b);
     if (i == _menuIdx) {
       _g->fillRoundRect(28, y - 16, 184, 32, 16, C_ACCENT);
@@ -408,5 +518,140 @@ void Ui::renderPerm(uint32_t now) {
       _g->setTextColor(C_DIM);
     }
     _g->drawString(PERM_OPTS[i], xc, 178);
+  }
+}
+
+void Ui::renderNotif(uint32_t now) {
+  if (_notifIdx < 0 || !_st.notifs[_notifIdx].used) return;
+  Notification& n = _st.notifs[_notifIdx];
+  uint32_t ac = n.color ? n.color : (n.priority >= 4 ? C_RED : C_ACCENT);
+
+  // ring: gauge value for GAUGE, remaining TTL (dim) otherwise
+  if (n.view == NotifView::GAUGE) {
+    float f = n.value / n.vmax;
+    ringPct(f < 0 ? 0 : f, ac);
+  } else if (n.expiresAt) {
+    float total = (float)(n.expiresAt - n.rcvdAt);
+    float rem = (float)(int32_t)(n.expiresAt - now);
+    if (total > 0 && rem > 0) ringPct(rem / total, C_RINGBG, 116, 119);
+  }
+
+  // topic header
+  _g->setFont(&fonts::Font2);
+  _g->setTextColor(C_DIM);
+  _g->drawString(n.topic[0] ? n.topic : "notification", 120, 28);
+
+  char buf[48];
+  switch (n.view) {
+    case NotifView::CARD: {
+      _g->setFont(&fonts::FreeSansBold12pt7b);
+      _g->setTextColor(ac);
+      wrapText(n.title, 58, 26, 2, 188);
+      _g->setFont(&fonts::Font2);
+      _g->setTextColor(C_TEXT);
+      wrapText(n.body, 112, 18, 3, 196);
+      break;
+    }
+    case NotifView::GAUGE: {
+      _g->setFont(&fonts::FreeSansBold9pt7b);
+      _g->setTextColor(C_DIM);
+      _g->drawString(n.title, 120, 66);
+      if (n.value == (int)n.value && fabsf(n.value) < 100000)
+        snprintf(buf, sizeof(buf), "%d", (int)n.value);
+      else
+        snprintf(buf, sizeof(buf), "%.1f", n.value);
+      _g->setFont(&fonts::FreeSansBold24pt7b);
+      _g->setTextColor(C_TEXT);
+      _g->drawString(buf, 120, 118);
+      if (n.unit[0]) {
+        _g->setFont(&fonts::FreeSansBold9pt7b);
+        _g->setTextColor(C_DIM);
+        _g->drawString(n.unit, 120, 152);
+      }
+      break;
+    }
+    case NotifView::LIST: {
+      _g->setFont(&fonts::FreeSansBold9pt7b);
+      _g->setTextColor(ac);
+      _g->drawString(n.title, 120, 50);
+      _g->setFont(&fonts::Font2);
+      for (int i = 0; i < n.nItems; i++) {
+        int y = 76 + i * 22;
+        _g->setTextDatum(textdatum_t::middle_left);
+        _g->setTextColor(C_DIM);
+        _g->drawString(n.itemL[i], 46, y);
+        _g->setTextDatum(textdatum_t::middle_right);
+        _g->setTextColor(C_TEXT);
+        _g->drawString(n.itemV[i], 196, y);
+      }
+      _g->setTextDatum(textdatum_t::middle_center);
+      break;
+    }
+    case NotifView::GRAPH: {
+      _g->setFont(&fonts::FreeSansBold9pt7b);
+      _g->setTextColor(ac);
+      _g->drawString(n.title, 120, 50);
+      if (n.nPts >= 2) {
+        float lo = n.pts[0], hi = n.pts[0];
+        for (int i = 1; i < n.nPts; i++) {
+          if (n.pts[i] < lo) lo = n.pts[i];
+          if (n.pts[i] > hi) hi = n.pts[i];
+        }
+        if (hi - lo < 1e-6f) { hi += 1; lo -= 1; }
+        const int x0 = 36, x1 = 204, y0 = 68, y1 = 150;
+        for (int i = 1; i < n.nPts; i++) {
+          int xa = x0 + (x1 - x0) * (i - 1) / (n.nPts - 1);
+          int xb = x0 + (x1 - x0) * i / (n.nPts - 1);
+          int ya = y1 - (int)((y1 - y0) * (n.pts[i - 1] - lo) / (hi - lo));
+          int yb = y1 - (int)((y1 - y0) * (n.pts[i] - lo) / (hi - lo));
+          _g->drawLine(xa, ya, xb, yb, ac);
+          _g->drawLine(xa, ya + 1, xb, yb + 1, ac);
+        }
+        int xl = x1;
+        int yl = y1 - (int)((y1 - y0) * (n.pts[n.nPts - 1] - lo) / (hi - lo));
+        _g->fillCircle(xl, yl, 3, C_TEXT);
+        float last = n.pts[n.nPts - 1];
+        if (last == (int)last && fabsf(last) < 100000)
+          snprintf(buf, sizeof(buf), "%d%s", (int)last, n.unit);
+        else
+          snprintf(buf, sizeof(buf), "%.1f%s", last, n.unit);
+        _g->setFont(&fonts::FreeSansBold12pt7b);
+        _g->setTextColor(C_TEXT);
+        _g->drawString(buf, 120, 176);
+      }
+      break;
+    }
+  }
+
+  // action chips when selecting
+  if (_actIdx >= 0 && n.nActs > 0) {
+    _g->setFont(&fonts::Font2);
+    for (int i = 0; i < n.nActs; i++) {
+      int xc = 120 + (int)((i - (n.nActs - 1) / 2.0f) * 66);
+      if (i == _actIdx) {
+        _g->fillRoundRect(xc - 30, 186, 60, 24, 12, ac);
+        _g->setTextColor(C_BG);
+      } else {
+        _g->setTextColor(C_DIM);
+      }
+      _g->drawString(n.acts[i], xc, 198);
+    }
+  } else {
+    _g->setFont(&fonts::Font2);
+    _g->setTextColor(C_DIM);
+    int total = _st.notifCount();
+    if (n.nActs > 0) {
+      _g->drawString("click: actions", 120, 192);
+    }
+    if (total > 1) {
+      int pos = 0, seen = 0;
+      for (int i = 0; i < MAX_NOTIFS; i++) {
+        if (!_st.notifs[i].used) continue;
+        seen++;
+        if (i == _notifIdx) pos = seen;
+      }
+      snprintf(buf, sizeof(buf), "%d/%d", pos, total);
+      _g->drawString(buf, 120, 212);
+    }
   }
 }

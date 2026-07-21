@@ -33,8 +33,12 @@ static volatile uint16_t wifiDiscCount = 0;
 static const char* AP_SSID = "ClaudePanel";
 static const char* AP_PASS = "claudepanel";
 static uint32_t lastConnAttempt = 0;
-static char rxBuf[1024];
+static char rxBuf[2048]; // graph/list notify payloads run ~2KB
 static size_t rxLen = 0;
+
+#ifndef DEVICE_NAME
+#define DEVICE_NAME "claudepanel"
+#endif
 
 static void sendJson(JsonDocument& d) {
   if (!link_.connected()) return;
@@ -218,7 +222,7 @@ void Net::loop(uint32_t now) {
         JsonDocument d;
         d["t"] = "hello";
         d["fw"] = FW_VERSION;
-        d["name"] = "claudepanel";
+        d["name"] = DEVICE_NAME;
         d["rst"] = (int)esp_reset_reason();
         d["up"] = now / 1000;
         sendJson(d);
@@ -306,6 +310,70 @@ void Net::handleMsg(char* payload, size_t len) {
     st.presetCount = n;
     st.dirty = true;
 
+  } else if (!strcmp(t, "notify")) {
+    const char* id = doc["id"] | "";
+    if (!*id) return;
+    const char* vs = doc["view"] | "card";
+    NotifView v = !strcmp(vs, "gauge") ? NotifView::GAUGE
+                : !strcmp(vs, "list")  ? NotifView::LIST
+                : !strcmp(vs, "graph") ? NotifView::GRAPH
+                : NotifView::CARD;
+    uint32_t now = millis();
+    int idx = st.allocNotif(id, doc["topic"] | "", v, now);
+    if (idx < 0) { sendDbg("notify dropped (stack full): %s", id); return; }
+    Notification& nf = st.notifs[idx];
+    nf = Notification();
+    nf.used = true;
+    nf.view = v;
+    nf.rcvdAt = now;
+    strlcpy(nf.id, id, sizeof(nf.id));
+    cpStr(nf.topic, sizeof(nf.topic), doc["topic"]);
+    int pr = doc["priority"] | 3;
+    nf.priority = pr < 1 ? 1 : pr > 5 ? 5 : pr;
+    uint32_t ttl = doc["ttl"] | 1800;
+    nf.expiresAt = ttl ? now + ttl * 1000UL : 0;
+    cpStr(nf.title, sizeof(nf.title), doc["title"]);
+    cpStr(nf.body, sizeof(nf.body), doc["body"]);
+    cpStr(nf.icon, sizeof(nf.icon), doc["icon"]);
+    cpStr(nf.unit, sizeof(nf.unit), doc["unit"]);
+    if (doc["label"].is<const char*>() && !nf.title[0])
+      cpStr(nf.title, sizeof(nf.title), doc["label"]);
+    if (doc["color"].is<const char*>()) {
+      const char* c = doc["color"].as<const char*>();
+      if (*c == '#') c++;
+      nf.color = (uint32_t)strtoul(c, nullptr, 16);
+    }
+    nf.value = doc["value"] | 0.0f;
+    nf.vmax = doc["max"] | 100.0f;
+    if (nf.vmax <= 0) nf.vmax = 100;
+    for (JsonObjectConst it : doc["items"].as<JsonArrayConst>()) {
+      if (nf.nItems >= MAX_NOTIF_ITEMS) break;
+      cpStr(nf.itemL[nf.nItems], sizeof(nf.itemL[0]), it["label"]);
+      if (it["value"].is<const char*>())
+        cpStr(nf.itemV[nf.nItems], sizeof(nf.itemV[0]), it["value"]);
+      else if (it["value"].is<float>())
+        snprintf(nf.itemV[nf.nItems], sizeof(nf.itemV[0]), "%g", it["value"].as<float>());
+      nf.nItems++;
+    }
+    for (JsonObjectConst a : doc["actions"].as<JsonArrayConst>()) {
+      if (nf.nActs >= MAX_NOTIF_ACTIONS) break;
+      cpStr(nf.acts[nf.nActs], sizeof(nf.acts[0]), a["label"]);
+      nf.nActs++;
+    }
+    for (JsonVariantConst p : doc["points"].as<JsonArrayConst>()) {
+      if (nf.nPts >= MAX_NOTIF_POINTS) break;
+      nf.pts[nf.nPts++] = p.as<float>();
+    }
+    st.dirty = true;
+    if (ui) ui->notifyNew(idx);
+
+  } else if (!strcmp(t, "notify_del")) {
+    int idx = st.findNotif(doc["id"] | "");
+    if (idx >= 0) {
+      st.notifs[idx].used = false;
+      st.dirty = true;
+    }
+
   } else if (!strcmp(t, "toast")) {
     if (ui && doc["m"].is<const char*>()) ui->toast(doc["m"].as<const char*>());
 
@@ -315,6 +383,15 @@ void Net::handleMsg(char* payload, size_t len) {
     st.leds = doc["leds"] | st.leds;
     st.dirty = true;
   }
+}
+
+void Net::sendNotifAction(const char* id, int action, bool dismiss) {
+  JsonDocument d;
+  d["t"] = "notify_action";
+  d["id"] = id;
+  if (dismiss) d["dismiss"] = true;
+  else d["action"] = action;
+  sendJson(d);
 }
 
 void Net::sendPermResult(const char* id, const char* result) {
