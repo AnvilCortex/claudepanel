@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# claudepanel: forward a Claude Code hook event to the local bridge (fail-silent).
+# usage: claudepanel-event <EventName>   — hook JSON arrives on stdin
+input=$(cat)
+curl -s -m 1 -X POST "http://127.0.0.1:8787/hook/${1:-Unknown}" \
+  -H 'Content-Type: application/json' \
+  --data-binary "{\"tmux_pane\":\"${TMUX_PANE:-}\",\"hook\":${input:-\{\}}}" \
+  >/dev/null 2>&1
+exit 0

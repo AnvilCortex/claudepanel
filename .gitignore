@@ -1,0 +1,7 @@
+firmware/.pio/
+firmware/.env
+firmware/src/wifi_secrets.h
+bridge/.venv/
+backup/*.bin
+__pycache__/
+.DS_Store
