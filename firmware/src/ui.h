@@ -33,6 +33,7 @@ private:
   void renderPerm(uint32_t now);
   void renderNotif(uint32_t now);
   void ringPct(float pct, uint32_t color, int r0 = 112, int r1 = 119);
+  void drawCardIcon(const char* icon, int cx, int cy, uint32_t color);
   void wrapText(const char* text, int y, int lineH, int maxLines, int maxW);
   void dismissNotif(bool tellHub);
   // menu rows: [notifications?] + presets + Back

@@ -230,8 +230,9 @@ class Hub:
     async def handle_notify_action(self, name, m):
         mid = m.get("id")
         if m.get("dismiss"):
+            # per-device dismiss: keep the specs — the same notification may
+            # still be live on other devices; TTL pruning reclaims the entry
             log(f"device '{name}' dismissed notify id={mid}")
-            self.actions.pop(mid, None)
             return
         idx = m.get("action")
         entry = self.actions.get(mid)
@@ -392,8 +393,10 @@ class Hub:
                             continue  # open / keepalive / poll_request
                         if ev.get("id"):
                             self.last_id = ev["id"]
-                            self._save_state()
                         await self.route(ev)
+                        # persist only after routing so a crash between the
+                        # two can't permanently skip an unrouted message
+                        self._save_state()
             except asyncio.CancelledError:
                 raise
             except Exception as e:

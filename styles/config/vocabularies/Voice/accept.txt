@@ -46,3 +46,16 @@ uuid
 Vale
 vendored
 vendoring
+ntfy
+tmux
+launchd
+pioarduino
+Espressif
+Elecrow
+CrowPanel
+claudepanel
+LovyanGFX
+ArduinoJson
+NDJSON
+Gitleaks
+Trivy

@@ -521,6 +521,41 @@ void Ui::renderPerm(uint32_t now) {
   }
 }
 
+// ntfy sends icon as a tag *name* (e.g. "rotating_light"); the built-in
+// fonts have no emoji glyphs, so map known tags to drawn symbols and skip
+// everything else rather than printing the raw identifier.
+static bool tagIn(const char* s, const char* const* names) {
+  for (; *names; names++)
+    if (!strcmp(s, *names)) return true;
+  return false;
+}
+
+void Ui::drawCardIcon(const char* icon, int cx, int cy, uint32_t color) {
+  if (!icon[0]) return;
+  static const char* const ALERT[] = {"warning", "rotating_light", "fire",
+                                      "bangbang", "exclamation", "skull", nullptr};
+  static const char* const OK[] = {"white_check_mark", "heavy_check_mark",
+                                   "ballot_box_with_check", "tada", nullptr};
+  static const char* const FAIL[] = {"x", "no_entry", "no_entry_sign",
+                                     "red_circle", nullptr};
+  if (tagIn(icon, ALERT)) {
+    _g->fillTriangle(cx - 8, cy + 6, cx + 8, cy + 6, cx, cy - 7, color);
+    _g->setFont(&fonts::Font2);
+    _g->setTextColor(C_BG);
+    _g->drawString("!", cx, cy + 1);
+  } else if (tagIn(icon, OK)) {
+    _g->drawLine(cx - 7, cy, cx - 2, cy + 5, color);
+    _g->drawLine(cx - 2, cy + 5, cx + 7, cy - 5, color);
+    _g->drawLine(cx - 7, cy + 1, cx - 2, cy + 6, color);
+    _g->drawLine(cx - 2, cy + 6, cx + 7, cy - 4, color);
+  } else if (tagIn(icon, FAIL)) {
+    _g->drawLine(cx - 6, cy - 6, cx + 6, cy + 6, color);
+    _g->drawLine(cx - 6, cy + 6, cx + 6, cy - 6, color);
+    _g->drawLine(cx - 5, cy - 6, cx + 7, cy + 6, color);
+    _g->drawLine(cx - 5, cy + 6, cx + 7, cy - 6, color);
+  }
+}
+
 void Ui::renderNotif(uint32_t now) {
   if (_notifIdx < 0 || !_st.notifs[_notifIdx].used) return;
   Notification& n = _st.notifs[_notifIdx];
@@ -544,11 +579,7 @@ void Ui::renderNotif(uint32_t now) {
   char buf[48];
   switch (n.view) {
     case NotifView::CARD: {
-      if (n.icon[0]) {
-        _g->setFont(&fonts::Font2);
-        _g->setTextColor(ac);
-        _g->drawString(n.icon, 120, 44);
-      }
+      drawCardIcon(n.icon, 120, 44, ac);
       _g->setFont(&fonts::FreeSansBold12pt7b);
       _g->setTextColor(ac);
       wrapText(n.title, 58, 26, 2, 188);
