@@ -4,7 +4,7 @@
 
 class Net;
 
-enum class Screen { BOOT, PORTAL, STATUS, MENU, PERM, NOTIF };
+enum class Screen { BOOT, PORTAL, STATUS, MENU, PERM };
 
 class Ui {
 public:
@@ -18,7 +18,6 @@ public:
   void toStatus();
   void notifyPerm();
   void permCancelled();
-  void notifyNew(int idx); // notification arrived; applies priority rules
   void toast(const char* msg);
 
   void onSteps(int16_t n);
@@ -31,13 +30,9 @@ private:
   void renderStatus(uint32_t now);
   void renderMenu();
   void renderPerm(uint32_t now);
-  void renderNotif(uint32_t now);
   void ringPct(float pct, uint32_t color, int r0 = 112, int r1 = 119);
   void wrapText(const char* text, int y, int lineH, int maxLines, int maxW);
-  void dismissNotif(bool tellHub);
-  // menu rows: [notifications?] + presets + Back
-  int menuNotifRow() const { return _st.notifCount() > 0 ? 1 : 0; }
-  int menuCount() const { return menuNotifRow() + _st.presetCount + 1; }
+  int menuCount() const { return _st.presetCount + 1; } // + Back
 
   LGFX& _tft;
   State& _st;
@@ -49,8 +44,6 @@ private:
   Screen _scr = Screen::BOOT;
   int _menuIdx = 0;
   int _permIdx = 1; // 0 Allow, 1 Pass, 2 Deny — default Pass
-  int _notifIdx = -1; // slot shown on NOTIF screen
-  int _actIdx = -1;   // -1 browsing stack, >=0 selecting an action
   float _spin = 0;
   uint32_t _lastRender = 0;
   char _toast[36] = {0};

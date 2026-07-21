@@ -1,13 +1,13 @@
 # ntfy Integration — Handoff Guide
 
 Evolving claudepanel from a single-purpose Claude Code monitor into a
-4-device notification fleet with `ntfy.aph.run` as the hub.
+4-device notification fleet with `ntfy.anvilcortex.com` as the hub.
 This doc is the working spec: what exists, what's designed, what's left,
 and where each piece of work happens.
 
 ```mermaid
 flowchart LR
-  AM[Alertmanager] -->|publish| N[ntfy.aph.run]
+  AM[Alertmanager] -->|publish| N[ntfy.anvilcortex.com]
   CI[CI / pipelines] -->|publish| N
   CC[claude bridge<br/>per dev machine] -->|publish status topics| N
   APP[anything with curl] -->|publish| N
@@ -25,11 +25,11 @@ flowchart LR
 
 | component | state | location |
 |-|-|-|
-| firmware 0.2.0 | working: claude status/menu/perm screens, TCP client link, WiFi telemetry + strongest-BSSID roaming, **notify stack + card/gauge/list/graph views**, `DEVICE_NAME` identity | `firmware/` |
-| bridge (claude-local) | working: statusline/hook/permission intake, tmux injection, `POST /notify` local intake, action execution, optional ntfy session publishing | `bridge/bridge.py` |
-| panel-hub | implemented: multi-device server, ntfy streaming subscriber, topic router, action executor; **not yet deployed** | `hub/` |
-| ntfy (live) | `https://ntfy.aph.run` — LXC vmid 422 via Caddy, compose-deploy role, **auth required** (`NTFY_AUTH_USERS`/`NTFY_AUTH_TOKENS` provisioned from 1Password Connect at runtime; apps use the shared `apps_token`) | `infra/ansible/roles/compose-deploy/files/ntfy/` |
-| ntfy (k8s manifest) | `ntfy.anvilcortex.com` — manifest exists but the host 404s at the ingress (no matching rule) and it has no auth; stale relative to the live LXC deployment, reconcile in infra | `infra/k8s/apps/ntfy/` |
+| firmware 0.1.4 | working: claude status/menu/perm screens, toast, TCP client link, WiFi telemetry + strongest-BSSID roaming | `firmware/` |
+| bridge (claude-local) | working: statusline/hook/permission HTTP intake, tmux injection, single-device TCP server, launchd service | `bridge/bridge.py` |
+| notify/template views | **not implemented** — designed below, iterate on the Mac with a device on USB | — |
+| panel-hub | **not implemented** — designed below, build in main dev env | — |
+| ntfy | deployed, v2.25.0, k8s `ntfy` namespace, **no auth configured** | `infra/k8s/apps/ntfy/` |
 
 The claude-local bridge never goes away: permission round-trips and tmux
 injection are inherently local to the machine running the sessions. The
@@ -76,7 +76,7 @@ Any ntfy publish renders as a card. Field mapping:
 curl -H "X-Title: backup failed" -H "X-Priority: 4" -H "X-Tags: rotating_light" \
   -H "X-Actions: http, Retry, https://runner.aph.run/api/retry/backup, method=POST" \
   -d "nightly restic run exited 1 on tank" \
-  https://ntfy.aph.run/infra-alerts
+  https://ntfy.anvilcortex.com/infra-alerts
 ```
 
 ### Tier 2 — template views (JSON message bodies)
@@ -94,7 +94,7 @@ in firmware for the round 240x240 display:
 
 ```sh
 curl -d '{"view":"gauge","label":"tank pool","value":81,"unit":"%","color":"#D97757"}' \
-  https://ntfy.aph.run/infra-status
+  https://ntfy.anvilcortex.com/infra-status
 ```
 
 A template message *replaces* the previous template from the same topic
@@ -119,7 +119,7 @@ expire via ntfy's `X-Expires`/hub-side TTL (default 30 min).
 
 ```json
 {
-  "ntfy_url": "https://ntfy.aph.run",
+  "ntfy_url": "https://ntfy.anvilcortex.com",
   "devices": {
     "office": {"topics": ["infra-alerts", "infra-status"]},
     "den":    {"topics": ["infra-alerts"]},
@@ -154,7 +154,7 @@ Existing (implemented in firmware 0.1.4 and `bridge/bridge.py`):
 | hub → dev | `cfg` | `enc_div`, `beep`, `leds` |
 | hub → dev | `toast` | `m` |
 
-Notification messages (implemented in firmware 0.2.0):
+Planned for the notification work:
 
 | dir | `t` | fields |
 |-|-|-|
@@ -162,18 +162,8 @@ Notification messages (implemented in firmware 0.2.0):
 | hub → dev | `notify_del` | `id` (hub-side expiry/ack) |
 | dev → hub | `notify_action` | `id`, `action` (index), or `dismiss: true` |
 
-Device-side semantics: 8-slot stack, template views replace by topic,
-cards stack (full stack evicts expired then oldest-lowest-priority).
-Priority 5 interrupts any screen except an active permission prompt;
-4 pops over status; 3 and below sit in the stack behind the amber count
-pill. The stack is reached via the presets menu ("notifs (N)"). Rotate
-scrolls, click enters/fires actions, long-press dismisses (reported to
-the hub as `dismiss`).
-
-The local bridge exposes the same intake as the hub will:
-`POST 127.0.0.1:8787/notify` with the wire schema above (plus ntfy-style
-`message`/`actions[{label,url,method,headers,body}]`) — useful for
-local scripts and for exercising a device without the hub.
+Firmware line buffer is 1024 bytes (`rxBuf` in `firmware/src/net.cpp`);
+bump it alongside the `notify` handler — graph payloads want ~2 KB.
 
 ## panel-hub deployment shape
 
@@ -193,13 +183,9 @@ statusline/hook/tmux parts, add the ntfy subscriber and router).
 - DNS: `panel-hub.aph.run` → the TCP entry point; this is the one name
   all device `.env` files bake as `BRIDGE_HOST`
 
-Auth: the live ntfy requires tokens (anonymous publish/subscribe returns
-403 — verified). The hub reads `NTFY_TOKEN` (env, e.g. from a k8s secret)
-or `NTFY_TOKEN_FILE` (op-style `/run/op` mount, matching the ntfy LXC's
-own provisioning pattern) and sends `Authorization: Bearer` on the
-subscribe stream. The local bridge accepts `ntfy_token` in its config for
-session publishing. Give the hub a read-mostly token; producers get
-write-only tokens per topic. Tokens never live in this repo.
+ntfy is currently unauthenticated. Before exposing anything beyond the
+LAN, add ntfy access tokens (`NTFY_AUTH_FILE` + `ntfy token`), give the
+hub a read-only token via secret, and producers write-only tokens.
 
 ## Claude Code as a producer
 
@@ -252,13 +238,10 @@ print(s.recv(4096).decode())"
 
 ## Roadmap
 
-Work in this repo is done in-session on the Mac (firmware, hub, bridge);
-only the infra-repo items are yours to carry into IaC.
-
-- [x] firmware: notify stack + card/gauge/list/graph views, DEVICE_NAME (0.2.0)
-- [x] bridge: `POST /notify` intake, action execution, optional ntfy session publishing
-- [x] hub: multi-device server, ntfy streaming subscriber, topic router, action executor (`hub/`)
-- [ ] infra: `k8s/apps/panel-hub/` manifests from `hub/Dockerfile`, TCP exposure for 8788, `panel-hub.aph.run` DNS (infra repo)
+- [ ] hub: extract device-link core from `bridge.py`, add ntfy subscriber + router (main dev env)
+- [ ] infra: `k8s/apps/panel-hub/` manifests, TCP exposure, `panel-hub.aph.run` DNS (infra repo)
 - [ ] infra: DHCP reservations + `panel-*.aph.run` records for the four devices (infra repo)
 - [ ] infra: ntfy auth tokens once anything is internet-reachable (infra repo)
-- [ ] flash + register remaining three devices (`DEVICE_NAME` per device, dial `panel-hub.aph.run`) — here, once the hub is live
+- [ ] firmware: notify/template views per the iteration guide above (this repo, on the Mac)
+- [ ] claude bridge: publish session summaries to a `claude` ntfy topic (this repo)
+- [ ] flash + register remaining three devices (`DEVICE_NAME`, reservation, dial hub)

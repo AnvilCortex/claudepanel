@@ -34,9 +34,8 @@ device-as-client raw TCP link.)
 | screen | rotate | click | long press |
 |-|-|-|-|
 | status | switch session | open presets menu | show device IP |
-| presets | move selection | send preset / open notifs | back |
+| presets | move selection | send preset to focused session | back |
 | permission | Allow / Pass / Deny | confirm | Pass |
-| notification | scroll stack / select action | enter actions / fire / dismiss | dismiss / cancel actions |
 
 Permission "Pass" (the default) does nothing — the normal terminal dialog
 continues. The LED ring (off by default; `"leds": true` in config enables

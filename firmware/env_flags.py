@@ -39,8 +39,6 @@ if ssid and pw and pw != "CHANGE_ME":
             f.write('#define BRIDGE_HOST "%s"\n' % c_escape(vals["BRIDGE_HOST"]))
         if vals.get("BRIDGE_PORT"):
             f.write("#define BRIDGE_PORT %s\n" % int(vals["BRIDGE_PORT"]))
-        if vals.get("DEVICE_NAME"):
-            f.write('#define DEVICE_NAME "%s"\n' % c_escape(vals["DEVICE_NAME"]))
     print("wifi_secrets.h generated for SSID '%s'" % ssid)
 else:
     if os.path.exists(header_path):
