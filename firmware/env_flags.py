@@ -6,9 +6,9 @@ placeholder, means no header — firmware falls back to the captive portal.
 """
 import os
 
-Import("env")
+Import("env")  # noqa: F821 — injected by PlatformIO's SCons runtime
 
-project_dir = env.subst("$PROJECT_DIR")
+project_dir = env.subst("$PROJECT_DIR")  # noqa: F821
 env_path = os.path.join(project_dir, ".env")
 header_path = os.path.join(project_dir, "src", "wifi_secrets.h")
 

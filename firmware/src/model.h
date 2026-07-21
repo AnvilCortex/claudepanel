@@ -153,7 +153,8 @@ struct State {
   // template views act as a per-topic dashboard slot; cards stack.
   // Returns slot index, evicting expired-then-oldest-lowest-priority
   // when full. -1 only if every slot outranks the newcomer.
-  int allocNotif(const char* id, const char* topic, NotifView v, uint32_t now) {
+  int allocNotif(const char* id, const char* topic, NotifView v, uint32_t now,
+                 uint8_t pr) {
     int i = findNotif(id);
     if (i >= 0) return i;
     if (v != NotifView::CARD)
@@ -165,6 +166,7 @@ struct State {
     int victim = -1;
     for (int j = 0; j < MAX_NOTIFS; j++) {
       if (notifs[j].expiresAt && (int32_t)(now - notifs[j].expiresAt) >= 0) return j;
+      if (notifs[j].priority > pr) continue;  // never evict a higher-priority slot
       if (victim < 0 || notifs[j].priority < notifs[victim].priority ||
           (notifs[j].priority == notifs[victim].priority &&
            (int32_t)(notifs[j].rcvdAt - notifs[victim].rcvdAt) < 0))

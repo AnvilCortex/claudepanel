@@ -7,5 +7,6 @@
     "desk":   {"topics": ["pipeline", "claude"]}
   },
   "device_port": 8788,
-  "http_port": 8080
+  "http_port": 8080,
+  "allowed_action_hosts": ["aph.run"]
 }

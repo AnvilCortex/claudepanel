@@ -544,6 +544,11 @@ void Ui::renderNotif(uint32_t now) {
   char buf[48];
   switch (n.view) {
     case NotifView::CARD: {
+      if (n.icon[0]) {
+        _g->setFont(&fonts::Font2);
+        _g->setTextColor(ac);
+        _g->drawString(n.icon, 120, 44);
+      }
       _g->setFont(&fonts::FreeSansBold12pt7b);
       _g->setTextColor(ac);
       wrapText(n.title, 58, 26, 2, 188);

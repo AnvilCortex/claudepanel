@@ -21,6 +21,7 @@ import uuid
 
 import aiohttp
 from aiohttp import web
+from urllib.parse import urlparse
 
 CONFIG_PATH = os.path.expanduser("~/.config/claudepanel/config.json")
 DEFAULT_CONFIG = {
@@ -211,9 +212,9 @@ class Bridge:
                 log(f"notify {nid} dismissed on device")
                 self.notif_actions.pop(nid, None)
             else:
-                idx = int(m.get("action", 0))
-                acts = self.notif_actions.get(nid) or []
-                if idx < len(acts) and acts[idx].get("url"):
+                idx = m.get("action", 0)
+                acts, _exp = self.notif_actions.get(nid) or ([], 0)
+                if isinstance(idx, int) and 0 <= idx < len(acts) and acts[idx].get("url"):
                     asyncio.create_task(self.fire_action(nid, acts[idx]))
                 else:
                     log(f"notify action {nid}[{idx}]: nothing to execute")
@@ -235,7 +236,7 @@ class Bridge:
         s = self.sessions.get(sid or "")
         pane = s.get("pane") if s else None
         if not pane:
-            log(f"inject dropped: session has no tmux pane (run claude inside tmux)")
+            log("inject dropped: session has no tmux pane (run claude inside tmux)")
             await self.send({"t": "toast", "m": "not in tmux"})
             return
         if not TMUX_BIN:
@@ -254,6 +255,10 @@ class Bridge:
 
     async def fire_action(self, nid, a):
         label = a.get("label", "?")
+        if urlparse(a["url"]).scheme not in ("http", "https"):
+            log(f"action {label!r} for {nid}: non-http url rejected")
+            await self.send({"t": "toast", "m": f"{label}: bad url"[:34]})
+            return
         try:
             async with self.http().request(
                 a.get("method", "POST").upper(), a["url"],
@@ -303,23 +308,34 @@ class Bridge:
             d = await req.json()
         except Exception:
             return web.json_response({"error": "invalid json"}, status=400)
+        if not isinstance(d, dict):
+            return web.json_response({"error": "body must be an object"}, status=400)
+        try:
+            priority = int(d.get("priority", 3))
+            ttl = int(d.get("ttl", 1800))
+        except (TypeError, ValueError):
+            return web.json_response(
+                {"error": "priority/ttl must be integers"}, status=400)
+        acts = d.get("actions") or []
+        if not isinstance(acts, list) or any(not isinstance(a, dict) for a in acts):
+            return web.json_response(
+                {"error": "actions must be a list of objects"}, status=400)
         self.notif_seq += 1
         nid = str(d.get("id") or f"local-{self.notif_seq}")
         msg = {"t": "notify", "id": nid,
                "topic": str(d.get("topic", "local"))[:20],
                "view": d.get("view", "card"),
-               "priority": int(d.get("priority", 3)),
-               "ttl": int(d.get("ttl", 1800))}
+               "priority": priority,
+               "ttl": ttl}
         if "message" in d and "body" not in d:
             msg["body"] = d["message"]
         for k in ("title", "body", "icon", "color", "unit", "label",
                   "value", "max", "items", "points"):
             if k in d:
                 msg[k] = d[k]
-        acts = d.get("actions") or []
         if acts:
             msg["actions"] = [{"label": str(a.get("label", "?"))[:15]} for a in acts[:3]]
-            self.notif_actions[nid] = acts[:3]
+            self.notif_actions[nid] = (acts[:3], time.time() + ttl + 60)
         await self.send(msg)
         return web.json_response({"ok": self.writer is not None, "id": nid})
 
@@ -445,6 +461,9 @@ class Bridge:
                 if now - self.sessions[sid]["last"] > SESSION_TTL_S:
                     self.sessions.pop(sid, None)
                     await self.send({"t": "remove", "sid": sid})
+            for nid, (_acts, exp) in list(self.notif_actions.items()):
+                if now > exp:
+                    self.notif_actions.pop(nid, None)
 
 
 def extract_ctx_pct(d, fallback):
