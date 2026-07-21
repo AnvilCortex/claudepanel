@@ -19,6 +19,9 @@ concurrency:
 jobs:
   publish:
     name: Build and Push
+    # Only main may publish: a workflow_dispatch from any other ref would
+    # otherwise overwrite :latest with unmerged code.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       IMAGE: ghcr.io/${{ github.repository_owner }}/claudepanel-hub
