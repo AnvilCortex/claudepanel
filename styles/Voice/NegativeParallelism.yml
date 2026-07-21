@@ -1,0 +1,13 @@
+# Detects "not X but Y" negated-setup contrast patterns.
+# Rule-of-three / triple-assertion is NOT implemented here: it cannot be
+# detected deterministically without heavy false positives on legitimate lists.
+# That pattern belongs to the styleguide judgment layer (prose-styleguide.md).
+extends: existence
+message: "Avoid negated-setup contrast: '%s'. Rewrite as two plain statements."
+level: error
+ignorecase: true
+tokens:
+  - "not only\\b[^.?!]*?\\bbut also"
+  - "\\bnot just\\b[^.?!]*?\\bbut\\b"
+  - "\\bisn't just\\b[^.?!]*?\\bit's\\b"
+  - "\\bit's not\\b[^.?!]*?\\bit's\\b"

@@ -1,0 +1,40 @@
+name: Prose lint (changed docs)
+
+# Lints prose in changed Markdown / MDX with Vale through the official
+# vale-cli/vale-action. Violations annotate the PR but the check never
+# fails the build. To enforce, flip fail_on_error to true.
+
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - "**/*.mdx"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vale:
+    name: Lint changed docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Lint prose with Vale
+        # Keep advisory annotation delivery from blocking on API outages.
+        continue-on-error: true
+        uses: vale-cli/vale-action@85f9f7f2c5f449ac0ae5b66662961bae3f77ca6a # v2.1.2
+        with:
+          version: "3.14.2"
+          vale_flags: "--minAlertLevel=error"
+          files: all
+          filter_mode: added
+          fail_on_error: false
+          reporter: github-pr-review

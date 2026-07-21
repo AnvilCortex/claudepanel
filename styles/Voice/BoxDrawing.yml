@@ -1,0 +1,10 @@
+# Box-drawing characters are ASCII-art table borders and never belong in prose
+# or a Markdown table. Hard ban, like EmDash and CurlyQuotes. Markdown tables
+# use "|" and "-", not these line-art glyphs, so this is a zero-false-positive
+# rule.
+extends: existence
+message: "Remove the box-drawing character. Use a plain Markdown table or text."
+level: error
+nonword: true
+tokens:
+  - '[\x{2500}-\x{257F}]'

@@ -1,0 +1,8 @@
+# Straight quotes only. Curly/smart quotes are a classic paste-from-a-chatbot
+# tell and break code samples and grep. Hard rule, like EmDash.
+extends: existence
+message: "Use straight quotes instead of a curly quote."
+level: error
+nonword: true
+tokens:
+  - '[\x{2018}\x{2019}\x{201C}\x{201D}]'

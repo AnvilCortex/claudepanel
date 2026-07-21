@@ -1,0 +1,16 @@
+extends: existence
+message: "Avoid fake authority phrase '%s'. Be specific or drop the claim."
+level: warning
+ignorecase: true
+tokens:
+  - industry observers
+  - experts agree
+  - experts argue
+  - experts say
+  - observers have noted
+  - some critics argue
+  - it is important to note
+  - based on available information
+  - as of my last update
+  - up to my last training update
+  - while specific details are limited

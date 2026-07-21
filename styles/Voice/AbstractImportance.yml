@@ -1,0 +1,24 @@
+extends: existence
+message: "Avoid abstract importance word '%s'. Use concrete language."
+level: warning
+ignorecase: true
+tokens:
+  - pivotal
+  - crucial
+  - transformative
+  - robust
+  - seamless
+  - dynamic
+  - innovative
+  - holistic
+  - nuanced
+  - underscores
+  - showcases
+  - testament
+  - delve
+  - tapestry
+  - interplay
+  - intricate
+  - garner
+  - enduring
+  - vital

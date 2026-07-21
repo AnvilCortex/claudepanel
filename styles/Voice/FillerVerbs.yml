@@ -1,0 +1,12 @@
+# Inflated verbs with a plainer everyday equivalent. The multi-word filler
+# phrases ("in order to", "a number of") moved to FillerPhrases, which is a
+# substitution rule so the suggested fix ships with the alert.
+extends: existence
+message: "Prefer a plainer verb. '%s' is filler."
+level: warning
+ignorecase: true
+tokens:
+  - utilize
+  - leverage
+  - facilitate
+  - commence

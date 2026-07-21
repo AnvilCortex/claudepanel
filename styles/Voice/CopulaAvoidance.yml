@@ -1,0 +1,12 @@
+# LLM writing dodges plain "is"/"has" with heavier constructions. Prefer the
+# copula: "the page is the entry point", not "the page serves as the entry
+# point".
+extends: existence
+message: "Prefer 'is' or 'has' over '%s'."
+level: warning
+ignorecase: true
+tokens:
+  - serves as
+  - serve as
+  - stands as
+  - stand as

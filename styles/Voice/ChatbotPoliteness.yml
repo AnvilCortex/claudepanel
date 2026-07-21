@@ -1,0 +1,16 @@
+extends: existence
+message: "Avoid chatbot politeness phrase '%s'."
+level: warning
+ignorecase: true
+tokens:
+  - Certainly
+  - Of course
+  - Great question
+  - great point
+  - excellent point
+  - you're absolutely right
+  - happy to help
+  - I'd be happy to
+  - I hope this helps
+  - Would you like me to
+  - Let me know if

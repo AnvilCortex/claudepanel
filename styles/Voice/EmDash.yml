@@ -1,0 +1,8 @@
+# nonword keeps Vale from wrapping the token in word boundaries, which
+# would only match a tight word—dash and miss the spaced form (word — word).
+extends: existence
+message: "Use commas, periods, or parentheses instead of an em dash."
+level: error
+nonword: true
+tokens:
+  - "—"
