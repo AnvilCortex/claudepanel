@@ -1,0 +1,11 @@
+{
+  "ntfy_url": "https://ntfy.aph.run",
+  "devices": {
+    "office": {"topics": ["infra-alerts", "infra-status"]},
+    "den":    {"topics": ["infra-alerts"]},
+    "rack":   {"topics": ["infra-status", "pipeline"]},
+    "desk":   {"topics": ["pipeline", "claude"]}
+  },
+  "device_port": 8788,
+  "http_port": 8080
+}

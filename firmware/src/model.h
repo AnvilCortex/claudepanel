@@ -3,6 +3,10 @@
 
 #define MAX_SESSIONS 6
 #define MAX_PRESETS  10
+#define MAX_NOTIFS        8
+#define MAX_NOTIF_ACTIONS 3
+#define MAX_NOTIF_ITEMS   6
+#define MAX_NOTIF_POINTS  60
 
 // session states as sent by the bridge
 enum class SessState : uint8_t { IDLE, WORKING, PERM, NOTIFY, ENDED };
@@ -32,6 +36,33 @@ struct PermRequest {
 struct Preset {
   char label[22] = {0};
   char text[140] = {0};
+};
+
+// ntfy-sourced notification. view selects the renderer; unused fields
+// stay zeroed. Template views (non-CARD) replace by topic, cards stack.
+enum class NotifView : uint8_t { CARD, GAUGE, LIST, GRAPH };
+
+struct Notification {
+  bool used = false;
+  char id[26] = {0};
+  char topic[22] = {0};
+  NotifView view = NotifView::CARD;
+  uint8_t priority = 3;   // ntfy 1-5
+  uint32_t expiresAt = 0; // millis deadline, 0 = never
+  uint32_t rcvdAt = 0;
+  char title[42] = {0};
+  char body[160] = {0};
+  char icon[16] = {0};
+  char unit[10] = {0};
+  uint32_t color = 0;     // 0 = accent default
+  float value = 0, vmax = 100;
+  uint8_t nItems = 0;
+  char itemL[MAX_NOTIF_ITEMS][18] = {{0}};
+  char itemV[MAX_NOTIF_ITEMS][14] = {{0}};
+  uint8_t nActs = 0;
+  char acts[MAX_NOTIF_ACTIONS][16] = {{0}};
+  uint8_t nPts = 0;
+  float pts[MAX_NOTIF_POINTS] = {0};
 };
 
 struct State {
@@ -103,6 +134,64 @@ struct State {
       }
     focused = order[((cur + n) % m + m) % m];
     dirty = true;
+  }
+
+  Notification notifs[MAX_NOTIFS];
+
+  int notifCount() const {
+    int n = 0;
+    for (auto& x : notifs) n += x.used;
+    return n;
+  }
+
+  int findNotif(const char* id) {
+    for (int i = 0; i < MAX_NOTIFS; i++)
+      if (notifs[i].used && strcmp(notifs[i].id, id) == 0) return i;
+    return -1;
+  }
+
+  // template views act as a per-topic dashboard slot; cards stack.
+  // Returns slot index, evicting expired-then-oldest-lowest-priority
+  // when full. -1 only if every slot outranks the newcomer.
+  int allocNotif(const char* id, const char* topic, NotifView v, uint32_t now) {
+    int i = findNotif(id);
+    if (i >= 0) return i;
+    if (v != NotifView::CARD)
+      for (int j = 0; j < MAX_NOTIFS; j++)
+        if (notifs[j].used && notifs[j].view == v && !strcmp(notifs[j].topic, topic))
+          return j;
+    for (int j = 0; j < MAX_NOTIFS; j++)
+      if (!notifs[j].used) return j;
+    int victim = -1;
+    for (int j = 0; j < MAX_NOTIFS; j++) {
+      if (notifs[j].expiresAt && (int32_t)(now - notifs[j].expiresAt) >= 0) return j;
+      if (victim < 0 || notifs[j].priority < notifs[victim].priority ||
+          (notifs[j].priority == notifs[victim].priority &&
+           (int32_t)(notifs[j].rcvdAt - notifs[victim].rcvdAt) < 0))
+        victim = j;
+    }
+    return victim;
+  }
+
+  // next used notification slot in direction dir (wraps); -1 when empty
+  int stepNotif(int from, int dir) const {
+    if (notifCount() == 0) return -1;
+    int i = from;
+    for (int k = 0; k < MAX_NOTIFS; k++) {
+      i = (i + dir + MAX_NOTIFS) % MAX_NOTIFS;
+      if (notifs[i].used) return i;
+    }
+    return -1;
+  }
+
+  void pruneNotifs(uint32_t now) {
+    for (auto& x : notifs) {
+      if (!x.used || !x.expiresAt) continue;
+      if ((int32_t)(now - x.expiresAt) >= 0) {
+        x.used = false;
+        dirty = true;
+      }
+    }
   }
 
   void pruneSessions(uint32_t now) {

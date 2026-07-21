@@ -13,6 +13,7 @@ public:
 
   void sendPermResult(const char* id, const char* result);
   void sendInject(const char* sid, const char* text);
+  void sendNotifAction(const char* id, int action, bool dismiss);
   void handleMsg(char* payload, size_t len);
 
   State& st;

@@ -74,6 +74,7 @@ void loop() {
   leds::set(aggregateLedMode());
   leds::tick(now);
   state.pruneSessions(now);
+  state.pruneNotifs(now);
   ui.tick(now);
   delay(2);
 }

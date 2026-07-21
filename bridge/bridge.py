@@ -30,6 +30,11 @@ DEFAULT_CONFIG = {
     "beep": False,
     "leds": False,
     "perm_timeout_s": 55,
+    # optional: publish a session-summary template to ntfy so hub-connected
+    # panels can show claude state; empty topic disables
+    "ntfy_url": "https://ntfy.aph.run",
+    "ntfy_claude_topic": "",
+    "ntfy_token": "",  # live ntfy requires auth; keep out of git
     "presets": [
         {"label": "Continue", "text": "continue"},
         {"label": "Run tests", "text": "run the tests and fix any failures"},
@@ -94,6 +99,16 @@ class Bridge:
         self.writer = None  # active device connection
         self.pending = {}  # perm id -> Future
         self.perm_lock = asyncio.Lock()
+        self.notif_seq = 0
+        self.notif_actions = {}  # notif id -> [full action specs]
+        self.last_ntfy_pub = 0.0
+        self._http = None
+
+    def http(self):
+        if self._http is None or self._http.closed:
+            self._http = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=10))
+        return self._http
 
     # ---- session registry ----
 
@@ -190,6 +205,18 @@ class Bridge:
                 fut.set_result(m.get("result", "pass"))
         elif t == "inject":
             await self.inject(m.get("sid"), m.get("text", ""))
+        elif t == "notify_action":
+            nid = m.get("id", "")
+            if m.get("dismiss"):
+                log(f"notify {nid} dismissed on device")
+                self.notif_actions.pop(nid, None)
+            else:
+                idx = int(m.get("action", 0))
+                acts = self.notif_actions.get(nid) or []
+                if idx < len(acts) and acts[idx].get("url"):
+                    asyncio.create_task(self.fire_action(nid, acts[idx]))
+                else:
+                    log(f"notify action {nid}[{idx}]: nothing to execute")
         elif t == "dbg":
             log(f"device dbg: {m.get('m')}")
         elif t == "hello":
@@ -225,7 +252,76 @@ class Bridge:
         log(f"injected into {pane}: {text[:50]!r}")
         await self.send({"t": "toast", "m": "injected"})
 
+    async def fire_action(self, nid, a):
+        label = a.get("label", "?")
+        try:
+            async with self.http().request(
+                a.get("method", "POST").upper(), a["url"],
+                headers=a.get("headers") or {}, data=a.get("body"),
+            ) as r:
+                log(f"action {label!r} for {nid}: HTTP {r.status}")
+                await self.send({"t": "toast", "m": f"{label}: {r.status}"[:34]})
+        except Exception as e:
+            log(f"action {label!r} for {nid} failed: {e}")
+            await self.send({"t": "toast", "m": f"{label}: failed"[:34]})
+
+    async def publish_claude_summary(self):
+        """Throttled tier-2 list payload to ntfy for hub-connected panels."""
+        topic = self.cfg.get("ntfy_claude_topic") or ""
+        url = self.cfg.get("ntfy_url") or ""
+        if not topic or not url:
+            return
+        nowt = time.time()
+        if nowt - self.last_ntfy_pub < 10:
+            return
+        self.last_ntfy_pub = nowt
+        items = []
+        for s in list(self.sessions.values())[:6]:
+            val = f"{s.get('ctx', 0)}%"
+            if s.get("cost"):
+                val += f" ${s['cost']:.2f}"
+            items.append({"label": f"{s.get('title', '?')} {s.get('state', '')}"[:17],
+                          "value": val})
+        body = json.dumps({"view": "list", "title": "claude sessions",
+                           "items": items, "ttl": 120})
+        headers = {}
+        if self.cfg.get("ntfy_token"):
+            headers["Authorization"] = f"Bearer {self.cfg['ntfy_token']}"
+        try:
+            async with self.http().post(f"{url}/{topic}", data=body,
+                                        headers=headers) as r:
+                if r.status != 200:
+                    log(f"ntfy publish failed: HTTP {r.status}")
+        except Exception as e:
+            log(f"ntfy publish failed: {e}")
+
     # ---- HTTP handlers ----
+
+    async def h_notify(self, req):
+        """Local notification intake — same schema the hub sends devices."""
+        try:
+            d = await req.json()
+        except Exception:
+            return web.json_response({"error": "invalid json"}, status=400)
+        self.notif_seq += 1
+        nid = str(d.get("id") or f"local-{self.notif_seq}")
+        msg = {"t": "notify", "id": nid,
+               "topic": str(d.get("topic", "local"))[:20],
+               "view": d.get("view", "card"),
+               "priority": int(d.get("priority", 3)),
+               "ttl": int(d.get("ttl", 1800))}
+        if "message" in d and "body" not in d:
+            msg["body"] = d["message"]
+        for k in ("title", "body", "icon", "color", "unit", "label",
+                  "value", "max", "items", "points"):
+            if k in d:
+                msg[k] = d[k]
+        acts = d.get("actions") or []
+        if acts:
+            msg["actions"] = [{"label": str(a.get("label", "?"))[:15]} for a in acts[:3]]
+            self.notif_actions[nid] = acts[:3]
+        await self.send(msg)
+        return web.json_response({"ok": self.writer is not None, "id": nid})
 
     async def h_statusline(self, req):
         d = await req.json()
@@ -249,6 +345,7 @@ class Bridge:
         s["ctx"] = extract_ctx_pct(d, s["ctx"])
         s["last"] = time.time()
         await self.push_session(sid)
+        await self.publish_claude_summary()
         return web.Response(status=204)
 
     async def h_hook(self, req):
@@ -378,6 +475,7 @@ def main():
     app.router.add_post("/statusline", bridge.h_statusline)
     app.router.add_post("/hook/{event}", bridge.h_hook)
     app.router.add_post("/permission", bridge.h_permission)
+    app.router.add_post("/notify", bridge.h_notify)
     app.router.add_get("/health", bridge.h_health)
 
     async def start():
