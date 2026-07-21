@@ -1,0 +1,48 @@
+name: Publish Hub Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "hub/**"
+      - ".github/workflows/publish-hub.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and Push
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/claudepanel-hub
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Log in to ghcr
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build image
+        run: |
+          set -euo pipefail
+          image="${IMAGE@L}"
+          docker build \
+            -t "$image:latest" \
+            -t "$image:sha-${GITHUB_SHA::7}" \
+            hub
+          echo "image=$image" >> "$GITHUB_ENV"
+
+      - name: Push image
+        run: |
+          set -euo pipefail
+          docker push "$image:sha-${GITHUB_SHA::7}"
+          docker push "$image:latest"
