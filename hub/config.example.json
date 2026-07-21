@@ -1,5 +1,5 @@
 {
-  "ntfy_url": "https://ntfy.aph.run",
+  "ntfy_url": "https://ntfy.home.arpa",
   "devices": {
     "office": {"topics": ["infra-alerts", "infra-status"]},
     "den":    {"topics": ["infra-alerts"]},
@@ -8,5 +8,5 @@
   },
   "device_port": 8788,
   "http_port": 8080,
-  "allowed_action_hosts": ["aph.run"]
+  "allowed_action_hosts": ["home.arpa"]
 }
