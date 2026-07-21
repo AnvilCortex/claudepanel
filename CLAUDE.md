@@ -1,6 +1,6 @@
-# ClaudePanel contributor guide
+# claudepanel contributor guide
 
-ClaudePanel displays Claude Code session status on an Elecrow CrowPanel ESP32-S3 and sends panel actions back to the active session. The repository contains ESP32 firmware, a local Python bridge, Claude Code hooks, and an optional ntfy notification hub.
+claudepanel displays Claude Code session status on an Elecrow CrowPanel ESP32-S3 and sends panel actions back to the active session. The repository contains ESP32 firmware, a local Python bridge, Claude Code hooks, and an optional ntfy notification hub.
 
 ## Repository layout
 
@@ -77,9 +77,10 @@ Use the port reported by your system if the USB device has a different name. The
 
 ## Test and lint
 
-The repository does not currently have an automated test suite or a code linter. Run the available build and syntax checks before submitting a change:
+The repository does not currently have an automated test suite. CI runs `ruff check`, `python -m compileall`, a PlatformIO firmware build, Trivy, Gitleaks, and dependency review on every pull request. Run the same checks locally before submitting a change:
 
 ```sh
+ruff check hub bridge firmware/env_flags.py
 python3 -m compileall -q bridge hub claude-integration/claudepanel-permission
 bash -n claude-integration/claudepanel-event
 (cd firmware && pio run)

@@ -320,10 +320,16 @@ class Bridge:
         except (TypeError, ValueError):
             return web.json_response(
                 {"error": "priority/ttl must be integers"}, status=400)
+        if ttl < 0:
+            return web.json_response({"error": "ttl must be >= 0"}, status=400)
         acts = d.get("actions") or []
-        if not isinstance(acts, list) or any(not isinstance(a, dict) for a in acts):
+        if not isinstance(acts, list) or any(
+            not isinstance(a, dict)
+            or ("url" in a and not isinstance(a["url"], str))
+            for a in acts
+        ):
             return web.json_response(
-                {"error": "actions must be a list of objects"}, status=400)
+                {"error": "actions must be objects with string urls"}, status=400)
         self.notif_seq += 1
         nid = str(d.get("id") or f"local-{self.notif_seq}")
         msg = {"t": "notify", "id": nid,

@@ -53,7 +53,7 @@ pioarduino
 Espressif
 Elecrow
 CrowPanel
-claudepanel
+[Cc]laude[Pp]anel
 LovyanGFX
 ArduinoJson
 NDJSON
