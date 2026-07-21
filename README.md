@@ -58,9 +58,11 @@ SessionStart, and SessionEnd → `claudepanel-event`, plus PermissionRequest →
 bridge is not at `http://127.0.0.1:8787`.
 
 The panel's session state, context %, and cost come from statusline posts.
-Point your `statusLine` command in `settings.json` at
-`plugin/scripts/claudepanel-statusline` (or call it from your own statusline
-script before rendering); it tees the JSON to the bridge and prints a minimal
+The statusline is user configuration, not plugin-installable: copy
+`plugin/scripts/claudepanel-statusline` from this repository to a stable
+location on your PATH (for example `~/.local/bin/`) and set it as the
+`statusLine` command in `settings.json`, or call it from your own statusline
+script before rendering. It tees the JSON to the bridge and prints a minimal
 line.
 
 On macOS the bridge can autostart via
