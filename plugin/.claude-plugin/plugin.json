@@ -1,0 +1,11 @@
+{
+  "name": "claudepanel",
+  "displayName": "ClaudePanel",
+  "version": "0.2.0",
+  "description": "Forward Claude Code session events and permission requests to a ClaudePanel bridge so a CrowPanel ESP32 bezel can display status and answer permission dialogs.",
+  "author": { "name": "AnvilCortex", "url": "https://github.com/AnvilCortex/claudepanel" },
+  "homepage": "https://github.com/AnvilCortex/claudepanel",
+  "repository": "https://github.com/AnvilCortex/claudepanel",
+  "license": "MIT",
+  "keywords": ["hooks", "hardware", "esp32", "statusline", "notifications"]
+}

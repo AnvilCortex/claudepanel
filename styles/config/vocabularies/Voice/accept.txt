@@ -61,3 +61,6 @@ Gitleaks
 Trivy
 vmid
 Caddy
+statusline
+autostart
+autostarts
