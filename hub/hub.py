@@ -19,6 +19,8 @@ Wire protocol (device -> hub):
 
 Config: JSON at $PANEL_CONFIG (default /etc/panel-hub/config.json, then
 ./config.json). Env overrides: NTFY_URL, DEVICE_PORT, HTTP_PORT.
+STATE_FILE (optional) persists the last-seen ntfy message id so a restart
+resumes with since= instead of dropping everything published while down.
 Health: GET /health on HTTP_PORT.
 """
 import asyncio
@@ -26,6 +28,7 @@ import json
 import os
 import sys
 import time
+from urllib.parse import urlparse
 
 import aiohttp
 from aiohttp import web
@@ -40,6 +43,10 @@ DEFAULT_CONFIG = {
     },
     "device_port": 8788,
     "http_port": 8080,
+    # http actions only fire at these host suffixes (SSRF guard: a producer
+    # with publish access must not be able to aim the hub's network identity
+    # at cluster-internal endpoints)
+    "allowed_action_hosts": ["aph.run"],
 }
 
 DEFAULT_TTL_S = 1800          # 30 min, matches the firmware card default
@@ -104,10 +111,31 @@ class Hub:
         self.topics = sorted(topics)
 
         self.devices = {}       # name -> StreamWriter (only known, routable names)
-        self.actions = {}       # (msg_id, action_idx) -> full ntfy action spec
+        self.actions = {}       # msg_id -> {"specs": [ntfy action dicts], "exp": ts}
         self.session = None     # aiohttp.ClientSession, created in the loop
-        self.last_id = None     # last ntfy message id, for since= resume
         self.ntfy_connected = False
+        self.state_file = os.environ.get("STATE_FILE")
+        self.last_id = self._load_state()  # last ntfy message id, for since= resume
+
+    def _load_state(self):
+        if not self.state_file:
+            return None
+        try:
+            with open(self.state_file) as f:
+                return f.read().strip() or None
+        except OSError:
+            return None
+
+    def _save_state(self):
+        if not self.state_file or not self.last_id:
+            return
+        try:
+            tmp = self.state_file + ".tmp"
+            with open(tmp, "w") as f:
+                f.write(self.last_id)
+            os.replace(tmp, self.state_file)
+        except OSError as e:
+            log(f"state file write failed: {e}")
 
     # ---- device link (TCP server, device dials in) ----
 
@@ -186,17 +214,33 @@ class Hub:
 
     # ---- device -> hub actions ----
 
+    def action_url_allowed(self, url):
+        try:
+            p = urlparse(url)
+        except ValueError:
+            return False
+        if p.scheme not in ("http", "https") or not p.hostname:
+            return False
+        host = p.hostname.lower()
+        return any(
+            host == suf or host.endswith("." + suf)
+            for suf in (self.cfg.get("allowed_action_hosts") or [])
+        )
+
     async def handle_notify_action(self, name, m):
         mid = m.get("id")
         if m.get("dismiss"):
             log(f"device '{name}' dismissed notify id={mid}")
+            self.actions.pop(mid, None)
             return
         idx = m.get("action")
-        spec = self.actions.get((mid, idx))
-        if not spec:
+        entry = self.actions.get(mid)
+        specs = entry["specs"] if entry else []
+        if not isinstance(idx, int) or not 0 <= idx < len(specs):
             log(f"device '{name}' notify_action id={mid} action={idx} "
                 f"— no stored action, ignoring")
             return
+        spec = specs[idx]
         atype = spec.get("action") or spec.get("type")
         if atype != "http":
             log(f"device '{name}' notify_action id={mid} action={idx} "
@@ -208,6 +252,10 @@ class Hub:
         body = spec.get("body")
         if not url:
             log(f"notify_action id={mid} action={idx} — http action has no url")
+            return
+        if not self.action_url_allowed(url):
+            log(f"notify_action id={mid} action={idx} — url {url!r} rejected "
+                f"(scheme/host outside allowed_action_hosts)")
             return
         try:
             async with self.session.request(
@@ -265,17 +313,18 @@ class Hub:
         if icon is not None and not wire.get("icon"):
             wire["icon"] = icon
 
-        # actions: send labels only; keep full specs hub-side keyed by (id, idx)
+        # actions: send labels only; keep full specs hub-side keyed by msg id.
+        # Compact non-dict entries out BEFORE storing so device indexes and
+        # stored indexes always agree.
         actions = msg.get("actions")
-        if isinstance(actions, list) and actions:
-            labels = []
-            for i, a in enumerate(actions):
-                if not isinstance(a, dict):
-                    continue
-                labels.append({"label": a.get("label", "")})
-                self.actions[(mid, i)] = a
-            if labels:
-                wire["actions"] = labels
+        if isinstance(actions, list):
+            specs = [a for a in actions if isinstance(a, dict)]
+            if specs:
+                wire["actions"] = [{"label": a.get("label", "")} for a in specs]
+                self.actions[mid] = {
+                    "specs": specs,
+                    "exp": time.time() + wire["ttl"] + 60,
+                }
 
         return wire
 
@@ -343,6 +392,7 @@ class Hub:
                             continue  # open / keepalive / poll_request
                         if ev.get("id"):
                             self.last_id = ev["id"]
+                            self._save_state()
                         await self.route(ev)
             except asyncio.CancelledError:
                 raise
@@ -353,6 +403,16 @@ class Hub:
             log(f"ntfy reconnecting in {backoff}s")
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 30)
+
+    # ---- housekeeping ----
+
+    async def prune_actions(self):
+        while True:
+            await asyncio.sleep(60)
+            now = time.time()
+            for mid, entry in list(self.actions.items()):
+                if now > entry["exp"]:
+                    self.actions.pop(mid, None)
 
     # ---- HTTP (health) ----
 
@@ -381,7 +441,9 @@ def main():
         await site.start()
         log(f"http (health) on 0.0.0.0:{cfg['http_port']}")
         try:
-            await asyncio.gather(hub.device_server(), hub.ntfy_subscriber())
+            await asyncio.gather(
+                hub.device_server(), hub.ntfy_subscriber(), hub.prune_actions()
+            )
         finally:
             await hub.session.close()
 

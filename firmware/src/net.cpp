@@ -318,8 +318,10 @@ void Net::handleMsg(char* payload, size_t len) {
                 : !strcmp(vs, "list")  ? NotifView::LIST
                 : !strcmp(vs, "graph") ? NotifView::GRAPH
                 : NotifView::CARD;
+    int pr = doc["priority"] | 3;
+    pr = pr < 1 ? 1 : pr > 5 ? 5 : pr;
     uint32_t now = millis();
-    int idx = st.allocNotif(id, doc["topic"] | "", v, now);
+    int idx = st.allocNotif(id, doc["topic"] | "", v, now, (uint8_t)pr);
     if (idx < 0) { sendDbg("notify dropped (stack full): %s", id); return; }
     Notification& nf = st.notifs[idx];
     nf = Notification();
@@ -328,8 +330,7 @@ void Net::handleMsg(char* payload, size_t len) {
     nf.rcvdAt = now;
     strlcpy(nf.id, id, sizeof(nf.id));
     cpStr(nf.topic, sizeof(nf.topic), doc["topic"]);
-    int pr = doc["priority"] | 3;
-    nf.priority = pr < 1 ? 1 : pr > 5 ? 5 : pr;
+    nf.priority = pr;
     uint32_t ttl = doc["ttl"] | 1800;
     nf.expiresAt = ttl ? now + ttl * 1000UL : 0;
     cpStr(nf.title, sizeof(nf.title), doc["title"]);
@@ -351,7 +352,9 @@ void Net::handleMsg(char* payload, size_t len) {
       cpStr(nf.itemL[nf.nItems], sizeof(nf.itemL[0]), it["label"]);
       if (it["value"].is<const char*>())
         cpStr(nf.itemV[nf.nItems], sizeof(nf.itemV[0]), it["value"]);
-      else if (it["value"].is<float>())
+      // is<float>() alone misses integer-typed JSON numbers (ArduinoJson v7
+      // checkJson is strict), so probe both numeric types
+      else if (it["value"].is<float>() || it["value"].is<long>())
         snprintf(nf.itemV[nf.nItems], sizeof(nf.itemV[0]), "%g", it["value"].as<float>());
       nf.nItems++;
     }
