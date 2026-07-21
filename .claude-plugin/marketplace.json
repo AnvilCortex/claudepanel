@@ -1,0 +1,12 @@
+{
+  "name": "claudepanel-marketplace",
+  "description": "ClaudePanel: Claude Code session status and permission control on a CrowPanel ESP32 bezel.",
+  "owner": { "name": "AnvilCortex" },
+  "plugins": [
+    {
+      "name": "claudepanel",
+      "source": "./plugin",
+      "description": "Show Claude Code session status on a CrowPanel ESP32 bezel and answer permission dialogs from the device. Requires the ClaudePanel bridge running locally."
+    }
+  ]
+}

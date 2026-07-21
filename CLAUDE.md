@@ -6,7 +6,8 @@ claudepanel displays Claude Code session status on an Elecrow CrowPanel ESP32-S3
 
 - `firmware/`: PlatformIO firmware for the display, encoder, LED ring, WiFi, and TCP client.
 - `bridge/`: Local `aiohttp` service that tracks Claude Code sessions and communicates with the panel.
-- `claude-integration/`: Claude Code event and permission hooks plus the macOS launchd definition.
+- `plugin/`: Claude Code plugin with the event, permission, and statusline hook scripts; `.claude-plugin/marketplace.json` at the repository root publishes it.
+- `claude-integration/`: the macOS launchd definition for the bridge.
 - `hub/`: Optional ntfy-to-panel service for a notification fleet.
 - `docs/`: Architecture and integration notes.
 - `styles/`: Vale rules and the prose styleguide.
@@ -81,8 +82,8 @@ The repository does not currently have an automated test suite. CI runs `ruff ch
 
 ```sh
 ruff check hub bridge firmware/env_flags.py
-python3 -m compileall -q bridge hub claude-integration/claudepanel-permission
-bash -n claude-integration/claudepanel-event
+python3 -m compileall -q bridge hub plugin/scripts/claudepanel-permission plugin/scripts/claudepanel-statusline
+bash -n plugin/scripts/claudepanel-event
 (cd firmware && pio run)
 vale .
 ```

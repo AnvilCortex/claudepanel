@@ -27,7 +27,7 @@ device-as-client raw TCP link.)
 |-|-|
 | firmware | `firmware/` (PlatformIO, arduino-esp32 3.x via pioarduino) | GC9A01 UI, WS2812 ring, knob input, TCP link to bridge |
 | bridge | `bridge/bridge.py` (launchd service) | session registry, device link, permission futures, tmux injection |
-| hooks | `claude-integration/` → symlinked into `~/.claude-shared/bin/` | forward events / permission requests to bridge |
+| hooks | `plugin/` (Claude Code plugin) | forward events / permission requests to bridge |
 
 ## Device controls
 
@@ -43,16 +43,29 @@ continues. The LED ring (off by default; `"leds": true` in config enables
 it): green = idle, orange chase = working, red pulse = permission wanted,
 blue = attention.
 
-## Claude Code wiring (already installed)
+## Claude Code wiring
 
-- `~/.claude-shared/settings.json` — hooks: UserPromptSubmit, PreToolUse,
-  Stop, Notification, SessionStart, SessionEnd → `claudepanel-event`;
-  PermissionRequest → `claudepanel-permission` (60s timeout). Hooks load at
-  session start, so restart sessions to pick them up.
-- `~/.claude-shared/bin/statusline-dispatch` — tees statusline JSON to the
-  bridge before forwarding to the per-account statusline.
-- Bridge autostarts via `~/Library/LaunchAgents/com.claudepanel.bridge.plist`;
-  logs at `~/Library/Logs/claudepanel-bridge.log`.
+Install the hooks as a Claude Code plugin:
+
+```
+/plugin marketplace add AnvilCortex/claudepanel
+/plugin install claudepanel@claudepanel-marketplace
+```
+
+The plugin registers UserPromptSubmit, PreToolUse, Stop, Notification,
+SessionStart, and SessionEnd → `claudepanel-event`, plus PermissionRequest →
+`claudepanel-permission` (60s timeout). Set `CLAUDEPANEL_BRIDGE_URL` when the
+bridge is not at `http://127.0.0.1:8787`.
+
+The panel's session state, context %, and cost come from statusline posts.
+Point your `statusLine` command in `settings.json` at
+`plugin/scripts/claudepanel-statusline` (or call it from your own statusline
+script before rendering); it tees the JSON to the bridge and prints a minimal
+line.
+
+On macOS the bridge can autostart via
+`claude-integration/com.claudepanel.bridge.plist` (update the `YOURUSER`
+paths first); logs land in `~/Library/Logs/claudepanel-bridge.log`.
 
 All hook scripts are fail-silent with ~1s timeouts: if the bridge or device
 is down, Claude Code behaves exactly as before.

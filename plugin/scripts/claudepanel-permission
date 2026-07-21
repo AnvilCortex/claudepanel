@@ -23,8 +23,9 @@ body = json.dumps({
 }).encode()
 
 try:
+    bridge = os.environ.get("CLAUDEPANEL_BRIDGE_URL", "http://127.0.0.1:8787")
     req = urllib.request.Request(
-        "http://127.0.0.1:8787/permission",
+        bridge + "/permission",
         data=body,
         headers={"Content-Type": "application/json"},
     )
