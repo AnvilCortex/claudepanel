@@ -28,8 +28,8 @@ flowchart LR
 | firmware 0.2.0 | working: claude status/menu/perm screens, TCP client link, WiFi telemetry + strongest-BSSID roaming, **notify stack + card/gauge/list/graph views**, `DEVICE_NAME` identity | `firmware/` |
 | bridge (claude-local) | working: statusline/hook/permission intake, tmux injection, `POST /notify` local intake, action execution, optional ntfy session publishing | `bridge/bridge.py` |
 | panel-hub | implemented: multi-device server, ntfy streaming subscriber, topic router, action executor; **not yet deployed** | `hub/` |
-| ntfy (live) | `https://ntfy.home.arpa` — LXC vmid 422 via Caddy, compose-deploy role, **auth required** (`NTFY_AUTH_USERS`/`NTFY_AUTH_TOKENS` provisioned from 1Password Connect at runtime; apps use the shared `apps_token`) | `infra/ansible/roles/compose-deploy/files/ntfy/` |
-| ntfy (k8s manifest) | `ntfy.anvilcortex.com` — manifest exists but the host 404s at the ingress (no matching rule) and it has no auth; stale relative to the live LXC deployment, reconcile in infra | `infra/k8s/apps/ntfy/` |
+| ntfy (live) | `https://ntfy.home.arpa` (LXC vmid 422 via Caddy, compose-deploy role), **auth required** (`NTFY_AUTH_USERS`/`NTFY_AUTH_TOKENS` provisioned from 1Password Connect at runtime; apps use the shared `apps_token`) | `infra/ansible/roles/compose-deploy/files/ntfy/` |
+| ntfy (k8s manifest) | `ntfy.example.com`: manifest exists but the host 404s at the ingress (no matching rule) and it has no auth; stale relative to the live LXC deployment, reconcile in infra | `infra/k8s/apps/ntfy/` |
 
 The claude-local bridge never goes away: permission round-trips and tmux
 injection are inherently local to the machine running the sessions. The
@@ -42,11 +42,11 @@ Four CrowPanel 1.28" HMI ESP32-S3 units. Each gets:
 - a name baked at build time (`DEVICE_NAME` in `firmware/.env`, sent in
   the `hello` message)
 - a DHCP reservation and a DNS record on `home.arpa`
-  (e.g. `panel-office.home.arpa`) — note the devices are TCP *clients*;
+  (e.g. `panel-office.home.arpa`); note the devices are TCP *clients*;
   the DNS names exist for OTA (`pio run -t upload --upload-port
   panel-office.home.arpa`) and future admin HTTP, not for the hub link
 - a `BRIDGE_HOST` to dial. `WiFiClient::connect()` resolves hostnames,
-  so this can be `panel-hub.home.arpa` — no firmware change needed
+  so this can be `panel-hub.home.arpa`, with no firmware change needed
 
 Interim topology until the hub exists: the desk device keeps dialing the
 Mac's local bridge (today's setup); the other three dial the hub. Target
@@ -261,4 +261,4 @@ only the infra-repo items are yours to carry into IaC.
 - [ ] infra: `k8s/apps/panel-hub/` manifests from `hub/Dockerfile`, TCP exposure for 8788, `panel-hub.home.arpa` DNS (infra repo)
 - [ ] infra: DHCP reservations + `panel-*.home.arpa` records for the four devices (infra repo)
 - [ ] infra: ntfy auth tokens once anything is internet-reachable (infra repo)
-- [ ] flash + register remaining three devices (`DEVICE_NAME` per device, dial `panel-hub.home.arpa`) — here, once the hub is live
+- [ ] flash + register remaining three devices (`DEVICE_NAME` per device, dial `panel-hub.home.arpa`), done here once the hub is live
