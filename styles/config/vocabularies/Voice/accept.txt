@@ -1,0 +1,48 @@
+# Accepted project terms (one per line; regex supported).
+# Words here are treated as correctly spelled by Vale.Spelling and are
+# exempt from the capitalization checks. This is a starter set of common
+# software terms; replace or extend it with your project's vocabulary.
+allowlist
+APIs
+argv
+backoff
+boolean
+camelCase
+changelog
+config
+cwd
+dcli
+enum
+falsy
+frontmatter
+gitignored
+hardcoded
+linter
+lockfile
+lockfiles
+[Mm]arkdown
+mdx
+MDX
+middleware
+monorepo
+npm
+onboarding
+readonly
+repo
+repos
+semver
+snake_case
+stderr
+stdin
+stdout
+styleguide
+subcommand
+toolchain
+toolchains
+TypeScript
+unstaged
+untracked
+uuid
+Vale
+vendored
+vendoring

@@ -1,0 +1,14 @@
+# Announcing what the text is about to do ("let's dive in") reads like a
+# tutorial script. Say the thing instead of introducing it.
+extends: existence
+message: "Drop the signposting phrase '%s'. Say the thing instead of announcing it."
+level: warning
+ignorecase: true
+tokens:
+  - let's dive in
+  - let's dive into
+  - let's explore
+  - let's break this down
+  - here's what you need to know
+  - now let's look at
+  - without further ado

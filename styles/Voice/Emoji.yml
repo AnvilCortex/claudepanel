@@ -1,0 +1,10 @@
+# Emojis decorating headings and bullets are an AI-output tell and do not
+# belong in prose. Ranges cover the common pictographs, dingbats, regional
+# indicators (flags), and symbol blocks; arrows and general punctuation are
+# deliberately excluded so technical notation is not flagged.
+extends: existence
+message: "Remove the emoji. Emojis do not belong in prose."
+level: warning
+nonword: true
+tokens:
+  - '[\x{1F300}-\x{1FAFF}\x{1F1E6}-\x{1F1FF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}]'

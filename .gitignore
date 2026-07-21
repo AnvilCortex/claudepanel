@@ -5,3 +5,6 @@ bridge/.venv/
 backup/*.bin
 __pycache__/
 .DS_Store
+
+# dcli workspace
+.dcli/

@@ -1,0 +1,11 @@
+# Clipped negation tacked onto the end of a sentence ("..., no guessing")
+# instead of written as a real clause. Targets the comma + "no/not" + gerund
+# shape, which is high-signal; broader negations stay in the judgment layer.
+extends: existence
+message: "Rewrite the tailing negation '%s' as a full clause."
+level: warning
+ignorecase: true
+nonword: true
+tokens:
+  - ',\s+no\s+\w+ing\b'
+  - ',\s+not\s+\w+ing\b'

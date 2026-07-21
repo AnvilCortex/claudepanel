@@ -1,0 +1,16 @@
+extends: existence
+message: "Avoid inflated transition '%s'. Cut it or use a plain connector."
+level: warning
+ignorecase: true
+tokens:
+  - in conclusion
+  - furthermore
+  - additionally
+  - moreover
+  - ultimately
+  - at its core
+  - the real question is
+  - what really matters
+  - the heart of the matter
+  - the deeper issue
+  - in reality

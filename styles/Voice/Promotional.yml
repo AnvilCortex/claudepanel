@@ -1,0 +1,16 @@
+# Advertisement-flavored language inflates tone without adding information.
+# Describe what a thing is and does in plain words.
+extends: existence
+message: "Avoid promotional language '%s'. Describe plainly."
+level: warning
+ignorecase: true
+tokens:
+  - vibrant
+  - nestled
+  - in the heart of
+  - groundbreaking
+  - breathtaking
+  - must-visit
+  - stunning
+  - renowned
+  - boasts
