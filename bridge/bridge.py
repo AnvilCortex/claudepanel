@@ -255,7 +255,11 @@ class Bridge:
 
     async def fire_action(self, nid, a):
         label = a.get("label", "?")
-        if urlparse(a["url"]).scheme not in ("http", "https"):
+        try:
+            scheme = urlparse(a["url"]).scheme
+        except (ValueError, TypeError, AttributeError):
+            scheme = None
+        if scheme not in ("http", "https"):
             log(f"action {label!r} for {nid}: non-http url rejected")
             await self.send({"t": "toast", "m": f"{label}: bad url"[:34]})
             return
